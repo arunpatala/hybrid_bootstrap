@@ -9,7 +9,8 @@ from keras.layers.pooling import MaxPooling2D
 from keras.utils import np_utils
 from keras.optimizers import SGD
 from sklearn.metrics import log_loss
-from keras.callbacks import Callback
+from keras.callbacks import Callback, CSVLogger
+from basic_hb import *
 
 
 class UncorruptedTrainHistory(Callback):
@@ -46,7 +47,7 @@ class OptimizerScheduler(Callback):
         K.set_value(self.model.optimizer.lr, lr)
         K.set_value(self.model.optimizer.momentum, momentum)
         
-
+D = 1
 batch_size = 128
 nb_classes = 10
 img_rows, img_cols = 28, 28
@@ -76,9 +77,9 @@ small_Y_train = Y_train[small_indices]
 def schedule(x):
     '''Rather ugly way of defining a learning schedule function'''
     x = np.array(x, dtype = 'float32')
-    lr = np.piecewise(x, [x < 500, (x >= 500) & (x < 1000), x >= 1000],
+    lr = np.piecewise(x, [x < 50*D, (x >= 50*D) & (x < 100*D), x >= 100*D],
                         [0.01, 0.001, 0.0001])
-    momentum = np.piecewise(x, [x < 500, x >= 500],
+    momentum = np.piecewise(x, [x < 50*D, x >= 50*D],
                         [0.9, 0.99])
     return((lr, momentum))
 
@@ -87,7 +88,7 @@ uncorrupted_train_history = UncorruptedTrainHistory([small_X_train, small_Y_trai
 optimizer_scheduler = OptimizerScheduler(schedule)
 for just_dropout in [False, True]:
     for unif in [False, True]:
-        for hbp in (np.arange(31) / 30.):
+        for hbp in (np.arange(11) / 10.):
             model = Sequential()
             model.add(HB(hbp / 2, shift = -1, input_shape = (img_rows, img_cols, 1), unif = unif, just_dropout = just_dropout))
             model.add(Conv2D(nb_filters, kernel_size = (nb_conv, nb_conv), padding = 'valid', activation = 'relu'))
@@ -106,15 +107,14 @@ for just_dropout in [False, True]:
             model.compile(loss='categorical_crossentropy',
                           optimizer= sgd,
                           metrics=['accuracy'])
-            myfit = model.fit(small_X_train, small_Y_train, batch_size = batch_size, epochs = 1500,
-                              verbose = 1, validation_data=(X_test, Y_test), callbacks = [uncorrupted_train_history, optimizer_scheduler])
+            myfit = model.fit(small_X_train, small_Y_train, batch_size = batch_size, epochs = 150*D,
+                              verbose = 1, validation_data=(X_test, Y_test), callbacks = [uncorrupted_train_history, optimizer_scheduler, CSVLogger('logs/lossp.{}.{}.{}.csv'.format(hbp, just_dropout, unif))])
             df = pd.DataFrame.from_dict(myfit.history)
             df['uncorrupted_train_acc'] = uncorrupted_train_history.accs
             df['uncorrupted_train_loss'] = uncorrupted_train_history.losses
-            df['hbp'] = np.repeat(hbp, 1500)
-            df['uniform'] = np.repeat(unif, 1500)
-            df['just_dropout'] = np.repeat(just_dropout, 1500)
+            df['hbp'] = np.repeat(hbp, 150*D)
+            df['uniform'] = np.repeat(unif, 150*D)
+            df['just_dropout'] = np.repeat(just_dropout, 150*D)
             frames.append(df)
-
-out_frame = pd.concat(frames)
-out_frame.to_csv('./data/p_curves.csv')
+            out_frame = pd.concat(frames)
+            out_frame.to_csv('./data/p_curves.csv')

@@ -9,10 +9,10 @@ from keras.layers.pooling import MaxPooling2D
 from keras.utils import np_utils
 from keras.optimizers import SGD
 from sklearn.metrics import log_loss
-from keras.callbacks import Callback
+from keras.callbacks import Callback, CSVLogger
 
-<<basic_hb>>
-<<2d_hybrid_bootstrap>>
+from basic_hb import *
+HB_2d_conv = HB
 
 class UncorruptedTrainHistory(Callback):
     '''Callback to keep track of uncorrupted training losses'''
@@ -64,24 +64,24 @@ X_train /= 255
 X_test /= 255
 Y_train = np_utils.to_categorical(y_train, nb_classes)
 Y_test = np_utils.to_categorical(y_test, nb_classes)
-
+D=1
 def schedule(x):
     '''Rather ugly way of defining a learning schedule function'''
     x = np.array(x, dtype = 'float32')
-    lr = np.piecewise(x, [x < 500, (x >= 500) & (x < 1000), (x >= 1000) & (x < 1500), x >= 1500],
+    lr = np.piecewise(x, [x < 50*D, (x >= 50*D) & (x < 100*D), (x >= 100*D) & (x < 150*D), x >= 150*D],
                       [0.01, 0.001, 0.0001, 0.00001])
-    momentum = np.piecewise(x, [x < 500, x >= 500],
+    momentum = np.piecewise(x, [x < 50*D, x >= 50*D],
                             [0.9, 0.99])
     return((lr, momentum))
 
 frames = []
 optimizer_scheduler = OptimizerScheduler(schedule)
 unif = True 
-epochs = 2000
+epochs = 200*D
 
 frames = []
-for just_dropout, hbp in zip([True, False], [0.65, 0.45]):
-    for n in np.exp2(range(10)).astype('int32'):
+for n in np.exp2(range(10)).astype('int32'):
+    for just_dropout, hbp in zip([True, False], [0.65, 0.45]):
         small_indices = np.array([], dtype = 'int32')
         for i in range(nb_classes):
             first_n_i_indices = np.arange(X_train.shape[0])[y_train == i][0:n]
@@ -112,7 +112,7 @@ for just_dropout, hbp in zip([True, False], [0.65, 0.45]):
                       optimizer= sgd,
                       metrics=['accuracy'])
         myfit = model.fit(small_X_train, small_Y_train, batch_size = batch_size, epochs = epochs,
-                          verbose = 1, validation_data=(X_test, Y_test), callbacks = [optimizer_scheduler, uncorrupted_train_history])
+                          verbose = 1, validation_data=(X_test, Y_test), callbacks = [optimizer_scheduler, uncorrupted_train_history, CSVLogger('logs/dropout_{}.n_{}.csv'.format(just_dropout, n))])
 
         df = pd.DataFrame.from_dict(myfit.history)
         df['uncorrupted_train_acc'] = uncorrupted_train_history.accs
@@ -123,5 +123,5 @@ for just_dropout, hbp in zip([True, False], [0.65, 0.45]):
         df['n'] = np.repeat(n, epochs)
         frames.append(df)
 
-out_frame = pd.concat(frames)
-out_frame.to_csv('./data/convergence_curves.csv')
+        out_frame = pd.concat(frames)
+        out_frame.to_csv('./data/convergence_curves.csv')

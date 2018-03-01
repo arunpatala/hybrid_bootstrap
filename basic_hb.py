@@ -1,6 +1,5 @@
 import numpy as np
 from keras import backend as K
-from theano import tensor as T
 from keras.engine.topology import Layer
 from keras.initializers import Constant
 
@@ -30,6 +29,16 @@ def hybo(x, p, shift, seed = None, unif = True, just_dropout = False):
     return x
 
 
+def hybo_tf(x, p, shift, seed = None, unif = True, just_dropout = False, ishape=None):
+    '''Tensorflow hybrid bootstrap backend'''
+    if p < 0. or p > 1:
+        raise Exception('Hybrid bootstrap p must be in interval [0, 1].')
+    d = K.shape(x).shape[0].value-1
+    pbatch = K.random_uniform(shape=[K.shape(x)[0]]+([1]*d)) * p
+    mask = K.random_uniform(shape=K.shape(x)) > pbatch
+    MASK =  K.cast(mask, 'float32')
+    return x * MASK + K.concatenate([x[shift:],x[:shift]],0) * (1-MASK)
+
 
 class HB(Layer):
     '''Applies the hybrid bootstrap to the input.
@@ -50,15 +59,12 @@ class HB(Layer):
         super(HB, self).__init__(**kwargs)
 
     def build(self, input_shape):
-        self.p = self.add_weight(shape=(),
-                                 name = 'p',
-                                 initializer=Constant(value = self.init_p),
-                                 trainable=False)
+        self.p = self.init_p
         super(HB, self).build(input_shape)
 
     def call(self, x, mask=None):
-        if 0. < self.p.get_value() <= 1.:
-            x = K.in_train_phase(hybo(x, p = self.p, shift = self.shift,
+        if 0. < self.p <= 1.:
+            x = K.in_train_phase(hybo_tf(x, p = self.p, shift = self.shift,
                                       unif = self.unif,
                                       just_dropout = self.just_dropout), x)
         return x

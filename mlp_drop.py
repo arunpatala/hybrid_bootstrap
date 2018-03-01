@@ -6,15 +6,16 @@ from keras.layers import Dense, Dropout, Flatten
 from keras.utils import np_utils
 from keras.optimizers import SGD
 from keras import regularizers
-from keras.callbacks import LearningRateScheduler
+from keras.callbacks import LearningRateScheduler, CSVLogger
+
 
 def schedule(x):
      x = np.array(x, dtype = 'float32')
      lr = np.piecewise(x,
-                       [x <= 250,
-                        (x > 250) & (x <= 500),
-                        (x > 500) & (x <= 750),
-                        x > 750],
+                       [x <= 25,
+                        (x > 25) & (x <= 50),
+                        (x > 50) & (x <= 75),
+                        x > 75],
                        [0.1,
                         0.1 * 0.2,
                         0.1 * 0.2 ** 2,
@@ -54,8 +55,8 @@ sgd = SGD(lr = 0.1, momentum = 0.9, decay = 0.00, nesterov = False)
 model.compile(loss = 'categorical_crossentropy',
              optimizer = sgd,
              metrics = ['accuracy'])
-fit = model.fit(X_train_s, Y_train_s, batch_size = batch_size, epochs = 1000,
+fit = model.fit(X_train_s, Y_train_s, batch_size = batch_size, epochs = 100,
                verbose = 1, validation_data = (X_test, Y_test),
-               callbacks = [optimizer_schedule])
+               callbacks = [optimizer_schedule, CSVLogger('logs/mlp_drop.csv')])
 
-return(format(100 * (1 - fit.history['val_acc'][-1]), '.2f'))
+print(format(100 * (1 - fit.history['val_acc'][-1]), '.2f'))
